@@ -769,6 +769,112 @@ await check('latex_verify reports a missing PDF instead of throwing', async () =
 })
 
 // ---------------------------------------------------------------------------
+// Every tool result must survive the harness's JSON validator
+// ---------------------------------------------------------------------------
+
+/**
+ * Verbatim reimplementation of the harness's `visitJsonValue` / `snapshotJsonValue`
+ * acceptance test (read out of the shipped runtime). A tool result that fails
+ * this is rejected outright with "value is not lossless JSON", so the model sees
+ * a tool crash instead of the actionable error the tool had prepared.
+ *
+ * The rules, all of which have bitten this plugin at least once:
+ *   - `undefined` anywhere is unrepresentable (the real incident: a failure
+ *     branch omitted `pdfBytes`);
+ *   - objects must have `Object.prototype` or `null` as prototype;
+ *   - arrays must have `Array.prototype` and no extra own keys;
+ *   - no `NaN`, `Infinity`, or `-0`;
+ *   - no cycles, no symbol keys, no non-enumerable own properties.
+ *
+ * @param value - the candidate tool result.
+ * @returns the first violation, or null when the value is acceptable.
+ */
+function losslessViolation(value) {
+  const visit = (node, ancestors, path) => {
+    if (node === null || typeof node === 'string' || typeof node === 'boolean') return null
+    if (typeof node === 'number') {
+      if (!Number.isFinite(node)) return `${path}: non-finite number ${node}`
+      if (Object.is(node, -0)) return `${path}: negative zero`
+      return null
+    }
+    if (typeof node !== 'object') return `${path}: typeof ${typeof node}`
+    if (ancestors.has(node)) return `${path}: reference cycle`
+    ancestors.add(node)
+    try {
+      if (Array.isArray(node)) {
+        if (Object.getPrototypeOf(node) !== Array.prototype) return `${path}: array prototype is not Array.prototype`
+        if (Reflect.ownKeys(node).length !== node.length + 1) return `${path}: array carries extra own keys`
+        for (let index = 0; index < node.length; index += 1) {
+          if (!Object.hasOwn(node, index)) return `${path}[${index}]: array hole`
+          const violation = visit(node[index], ancestors, `${path}[${index}]`)
+          if (violation !== null) return violation
+        }
+        return null
+      }
+      const prototype = Object.getPrototypeOf(node)
+      if (prototype !== Object.prototype && prototype !== null) {
+        return `${path}: prototype is ${prototype?.constructor?.name ?? 'exotic'}`
+      }
+      for (const key of Reflect.ownKeys(node)) {
+        if (typeof key !== 'string') return `${path}: symbol key`
+        if (Object.getOwnPropertyDescriptor(node, key)?.enumerable !== true) return `${path}.${key}: non-enumerable`
+        const violation = visit(Reflect.get(node, key), ancestors, `${path}.${key}`)
+        if (violation !== null) return violation
+      }
+      return null
+    } finally {
+      ancestors.delete(node)
+    }
+  }
+  return visit(value, new Set(), '$')
+}
+
+await check('every tool result passes the harness JSON validator, including failure paths', async () => {
+  const { ctx, captured } = fakeContext()
+  apply(ctx, {})
+  const byName = Object.fromEntries(captured.tools.map((tool) => [tool.name, tool]))
+  const exec = { agent: { id: 'test-agent' }, signal: undefined }
+
+  // Success shapes, taken from a real build and a real verification.
+  assert.ok(compiled !== null, 'no compile result available')
+  const doctorValue = await byName.latex_doctor.execute({}, exec)
+  const verifyValue = await byName.latex_verify.execute({ pdf: compiled.pdfPath }, exec)
+  const compileValue = await byName.latex_compile.execute({ file: compiled.texFile }, exec)
+
+  const cases = [
+    ['latex_doctor success', doctorValue],
+    ['latex_verify success', verifyValue],
+    ['latex_compile success', compileValue],
+    // Failure paths: the class of bug that produced "value is not lossless JSON".
+    ['latex_compile missing file', await byName.latex_compile.execute({ file: 'E:/nope/missing.tex' }, exec)],
+    ['latex_verify missing pdf', await byName.latex_verify.execute({ pdf: 'E:/nope/missing.pdf' }, exec)],
+    ['latex_verify unreadable pdf', await byName.latex_verify.execute({ pdf: 'package.json' }, exec)],
+  ]
+
+  for (const [label, value] of cases) {
+    const violation = losslessViolation(value)
+    assert.equal(violation, null, `${label}: ${violation}`)
+    // The harness also validates against the declared schema, so every required
+    // key must be present — a missing key is what `undefined` looked like.
+    const tool = captured.tools.find((entry) => label.startsWith(entry.name))
+    assert.ok(tool !== undefined, `no tool for ${label}`)
+    for (const key of tool.output.schema.required) {
+      assert.ok(Object.hasOwn(value, key), `${label}: required key "${key}" is absent from the result`)
+    }
+  }
+})
+
+await check('the JSON validator itself rejects the shapes it is supposed to', () => {
+  // Mutation test: prove the guard above has teeth.
+  assert.notEqual(losslessViolation({ a: undefined }), null)
+  assert.notEqual(losslessViolation({ a: Number.NaN }), null)
+  assert.notEqual(losslessViolation({ a: -0 }), null)
+  assert.notEqual(losslessViolation(new Map()), null)
+  assert.notEqual(losslessViolation([1, , 3]), null)
+  assert.equal(losslessViolation({ a: [1, 2, { b: null }] }), null)
+})
+
+// ---------------------------------------------------------------------------
 // Report
 // ---------------------------------------------------------------------------
 
