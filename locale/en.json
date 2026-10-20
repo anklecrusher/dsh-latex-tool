@@ -1,0 +1,4 @@
+{
+  "name": "LaTeX",
+  "description": "Compile, diagnose and verify LaTeX projects: the latex_compile / latex_verify / latex_doctor tools plus the bundled latex-project-workflow skill."
+}

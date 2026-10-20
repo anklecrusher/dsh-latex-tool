@@ -1,0 +1,39 @@
+{
+  "name": "@local/dsh-latex-tool",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "LaTeX compile, diagnose and verify tools for DeepSeek Harness: latex_compile / latex_verify / latex_doctor plus the bundled latex-project-workflow skill and a settings panel.",
+  "main": "./entry.js",
+  "exports": {
+    ".": "./entry.js",
+    "./client": "./client.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "icon": "./icon.svg",
+  "files": [
+    "entry.js",
+    "index.js",
+    "client.js",
+    "lib",
+    "skill",
+    "scripts",
+    "locale",
+    "icon.svg"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-settings-plugins"
+      ]
+    }
+  }
+}

@@ -1,0 +1,13 @@
+* text=auto eol=lf
+
+# The Python helper is an executable script, and the shell-facing harness is
+# run by node; both should keep LF on checkout even on Windows.
+*.py text eol=lf
+*.mjs text eol=lf
+*.js text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.md text eol=lf
+
+# PNGs produced by verification runs are binary if they ever get committed.
+*.png binary

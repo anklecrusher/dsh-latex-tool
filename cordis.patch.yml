@@ -1,0 +1,57 @@
+# Registers the LaTeX tool bundle.
+#
+# Why this bundle exists at all, instead of using openai-bundled/latex@0.2.8:
+# that plugin fails on this machine in four measured ways (a temp path that
+# carries the 8.3 short name `~`, which latexmk rejects outright; UTF-8 decoding
+# of GBK latexmk output, which crashes on any project under a non-ASCII path;
+# a Windows-inert managed-install button; and a version reader that reports the
+# Perl locale warning instead of the version). The full evidence, with source
+# line numbers, is in `skill/references/official-plugin-pitfalls.md`, and each
+# fix is implemented here rather than described.
+#
+# What it adds that the official plugin does not have: an engine decision that
+# understands ctex/xeCJK/fontspec, a real log parser (not "the last 8000
+# characters"), and — the point of the whole plugin — PDF product verification
+# that reports missing glyphs, blank pages and unresolved citation keys.
+#
+# Every key below is optional. With an empty config the plugin probes the
+# machine unaided: `latex_doctor` decides where TeX Live is, which engines
+# answer, whether ctex/biblatex-gb7714 are installed, and which PDF-text tier is
+# available.
+- insert:
+    - id: latex-tool
+      name: '@local/dsh-latex-tool'
+      config:
+        # Absolute path to the TeX bin directory (the directory holding
+        # latexmk.exe / xelatex.exe). Omit it to probe: `kpsewhich
+        # -var-value=TEXMFROOT`, then the known TeX Live and MiKTeX layouts,
+        # then PATH — each candidate is verified to exist, because this
+        # machine's Machine PATH still carries a deleted `D:\texlive\2024`
+        # entry that a string test would accept.
+        # texBin: D:/Program Files (x86)/texlive/2026/bin/windows
+        #
+        # Engine used when the source gives no signal. `auto` (the default)
+        # infers from the % !TEX program magic comment, then \documentclass
+        # (ctex* → xelatex), then \usepackage (fontspec/xeCJK → xelatex,
+        # luacode → lualatex), then falls back to pdflatex.
+        # defaultEngine: auto
+        #
+        # latexmk runs with `-norc` by default, because a latexmkrc is Perl and
+        # would execute on a project the user has merely asked to preview. Set
+        # this true to honour the project's own latexmkrc instead; the tool
+        # reports `norc: false` when it does.
+        # respectLatexmkrc: false
+        #
+        # Deadline for one latexmk run. A 300-page thesis with biber is
+        # normally well inside two minutes.
+        # timeoutMs: 180000
+        #
+        # Python interpreter used for the full-fidelity PDF check (PyMuPDF).
+        # Omit it to probe: PATH, then the known system interpreters. A Python
+        # without PyMuPDF is not a failure — verification degrades to
+        # `pdftotext -enc UTF-8`, then to PDF structure only, and says which
+        # tier answered.
+        # pythonPath: D:/Program Files/python.exe
+        #
+        # Resolution of rendered verification pages, when render is requested.
+        # renderDpi: 110

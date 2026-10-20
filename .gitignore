@@ -1,0 +1,12 @@
+# Build products of the harness runs that happen inside this repository.
+.latex-build/
+.latex-verify/
+
+# Python bytecode from running scripts/verify_pdf.py in place.
+__pycache__/
+*.pyc
+
+# Editor and OS noise.
+Thumbs.db
+desktop.ini
+.DS_Store

@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="LaTeX">
+  <rect width="64" height="64" rx="14" fill="#1b2733"/>
+  <!-- drop cap: a serif T, drawn as geometry so it never depends on an installed font -->
+  <g fill="#f1e7d5">
+    <rect x="9" y="16" width="22" height="4" rx="0.6"/>
+    <rect x="9" y="20" width="3.2" height="2.4"/>
+    <rect x="27.8" y="20" width="3.2" height="2.4"/>
+    <rect x="18" y="20" width="4" height="23"/>
+    <rect x="13.5" y="43" width="13" height="3.4" rx="0.6"/>
+    <rect x="13.5" y="41.4" width="2.6" height="1.8"/>
+    <rect x="23.9" y="41.4" width="2.6" height="1.8"/>
+  </g>
+  <!-- set text lines beside the drop cap -->
+  <g fill="#8299ac">
+    <rect x="36" y="19" width="19" height="3.4" rx="1.2"/>
+    <rect x="36" y="27" width="14" height="3.4" rx="1.2"/>
+    <rect x="36" y="35" width="19" height="3.4" rx="1.2"/>
+    <rect x="36" y="43" width="10" height="3.4" rx="1.2"/>
+  </g>
+  <!-- typesetting baseline -->
+  <rect x="9" y="50" width="46" height="1.6" rx="0.8" fill="#4bb3c9"/>
+</svg>

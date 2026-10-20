@@ -1,0 +1,4 @@
+{
+  "name": "LaTeX",
+  "description": "编译、诊断与验证 LaTeX 项目：latex_compile / latex_verify / latex_doctor 三个工具与内置 latex-project-workflow skill。"
+}
