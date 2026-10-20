@@ -61,7 +61,7 @@ async function check(name, fn) {
  * @returns the fake context plus its captured registrations.
  */
 function fakeContext(options = {}) {
-  const captured = { tools: [], routes: [], effects: [], logs: [], injected: [], skills: [] }
+  const captured = { tools: [], routes: [], effects: [], logs: [], injected: [], skills: [], cwdRequests: [] }
   const hasSkills = options.skills !== false
   const hasWebServer = options.webServer !== false
   const ctx = {
@@ -74,7 +74,11 @@ function fakeContext(options = {}) {
       captured.effects.push(fn)
       return fn()
     },
-    get: (name) => (name === 'skills' ? (hasSkills ? services.skills : undefined) : undefined),
+    get: (name) => {
+      if (name === 'skills') return hasSkills ? services.skills : undefined
+      if (name === 'workingDirectory') return services.workingDirectory
+      return undefined
+    },
     inject: (names, callback) => {
       captured.injected.push(names)
       const available = names.every((name) => {
@@ -97,6 +101,17 @@ function fakeContext(options = {}) {
   }
 
   const services = {
+    // Modelled on the real seam: the harness resolves the session cwd through a
+    // service keyed by the calling agent, not through a field on the execution
+    // context. `ensure` records the call so the test can prove the tool asked
+    // for it rather than silently falling back to the process directory.
+    workingDirectory: {
+      defaultDirectory: options.defaultDirectory ?? process.cwd(),
+      async ensure(agent, signal) {
+        captured.cwdRequests.push({ agent, aborted: signal?.aborted === true })
+        return options.sessionDirectory ?? process.cwd()
+      },
+    },
     skills: hasSkills
       ? {
           registerProvider: (factory) => {
@@ -695,7 +710,7 @@ await check('every tool render() produces non-empty text for a real result', asy
   const { ctx, captured } = fakeContext()
   apply(ctx, {})
   const byName = Object.fromEntries(captured.tools.map((tool) => [tool.name, tool]))
-  const doctorValue = await byName.latex_doctor.execute({}, { cwd: process.cwd() })
+  const doctorValue = await byName.latex_doctor.execute({}, { agent: { id: 'test-agent' }, signal: undefined })
   const doctorText = byName.latex_doctor.output.render({}, doctorValue)
   assert.equal(doctorText[0].type, 'text')
   assert.ok(doctorText[0].text.includes('LaTeX environment'), doctorText[0].text)
@@ -706,18 +721,48 @@ await check('latex_compile reports a missing file instead of throwing', async ()
   const { ctx, captured } = fakeContext()
   apply(ctx, {})
   const tool = captured.tools.find((entry) => entry.name === 'latex_compile')
-  const value = await tool.execute({ file: 'E:/definitely/not/here.tex' }, { cwd: process.cwd() })
+  const value = await tool.execute({ file: 'E:/definitely/not/here.tex' }, { agent: { id: 'test-agent' }, signal: undefined })
   assert.equal(value.ok, false)
   assert.ok(value.error.length > 0)
   const text = tool.output.render({}, value)[0].text
   assert.ok(text.includes('BUILD NOT RUN'), text)
 })
 
+await check('a relative path is resolved against the session working directory, not the process cwd', async () => {
+  // The bug this guards: the harness does not put `cwd` on the execution input,
+  // so a tool that reads `exec.cwd` gets undefined and resolves relative paths
+  // against the desktop app's own directory. "Compile main.tex" would then fail
+  // for a file the user is looking at. The cwd is a service call.
+  const projectDir = scratchProject('relcwd')
+  created.push(projectDir)
+  writeTex(projectDir, 'main.tex', CTEX_DOC)
+
+  const { ctx, captured } = fakeContext({ sessionDirectory: projectDir })
+  apply(ctx, {})
+  const tool = captured.tools.find((entry) => entry.name === 'latex_compile')
+
+  const value = await tool.execute({ file: 'main.tex' }, { agent: { id: 'test-agent' }, signal: undefined })
+  assert.ok(captured.cwdRequests.length > 0, 'the tool never asked the workingDirectory service for the session cwd')
+  assert.equal(value.texFile, join(projectDir, 'main.tex'), `resolved against the wrong directory: ${value.texFile}`)
+  assert.equal(value.ok, true, `compile failed: ${value.error || value.headline}`)
+  assert.ok(value.pdfPath.startsWith(projectDir.replace(/\\/g, '/')) || value.pdfPath.startsWith(projectDir), value.pdfPath)
+
+  // The verify side must resolve the same way, given the pdfPath the compile reported.
+  const verifyTool = captured.tools.find((entry) => entry.name === 'latex_verify')
+  const verified = await verifyTool.execute(
+    { pdf: '.latex-build/main.pdf' },
+    { agent: { id: 'test-agent' }, signal: undefined },
+  )
+  assert.equal(verified.error, '', `verify could not find the PDF: ${verified.error}`)
+  assert.equal(verified.capability, 'full')
+  assert.ok(verified.pages > 0)
+})
+
 await check('latex_verify reports a missing PDF instead of throwing', async () => {
   const { ctx, captured } = fakeContext()
   apply(ctx, {})
   const tool = captured.tools.find((entry) => entry.name === 'latex_verify')
-  const value = await tool.execute({ pdf: 'E:/definitely/not/here.pdf' }, { cwd: process.cwd() })
+  const value = await tool.execute({ pdf: 'E:/definitely/not/here.pdf' }, { agent: { id: 'test-agent' }, signal: undefined })
   assert.equal(value.pages, 0)
   assert.ok(value.error.length > 0)
   assert.equal(value.capability, 'minimal')

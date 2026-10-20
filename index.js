@@ -82,7 +82,10 @@ export function apply(ctx, config) {
   const patch = normalizeConfig(config, logger)
   const service = createService(patch, logger)
 
-  for (const tool of createTools(service, { logger })) {
+  // `ctx` is passed through because relative paths must be resolved against the
+  // session working directory, which is a service (`workingDirectory.ensure`),
+  // not a field on the tool execution context. See resolveSessionCwd.
+  for (const tool of createTools(service, { logger, ctx })) {
     ctx.tools.register(tool)
   }
 
